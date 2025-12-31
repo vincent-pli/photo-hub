@@ -1,0 +1,13 @@
+# Production dependencies
+-e .
+click>=8.0
+
+# Development dependencies
+pytest>=7.0
+pytest-cov>=4.0
+black>=23.0
+isort>=5.12
+flake8>=6.0
+mypy>=1.0
+sphinx>=7.0
+sphinx-rtd-theme>=1.0
