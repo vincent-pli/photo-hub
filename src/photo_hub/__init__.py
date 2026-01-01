@@ -1,7 +1,7 @@
-"""opencode-testing - A Python application for testing opencode functionality."""
+"""photo-hub - AI-powered photo management and search tool."""
 
 __version__ = "0.1.0"
-__author__ = "opencode-testing contributors"
+__author__ = "photo-hub contributors"
 __license__ = "MIT"
 
 import sys

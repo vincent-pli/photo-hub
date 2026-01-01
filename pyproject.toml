@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "opencode-testing"
+name = "photo-hub"
 version = "0.1.0"
-description = "A Python application for testing opencode functionality"
+description = "AI-powered photo management and search tool"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -14,7 +14,7 @@ authors = [
 maintainers = [
     {name = "Your Name", email = "your.email@example.com"},
 ]
-keywords = ["opencode", "testing", "python", "application"]
+keywords = ["photo", "image", "ai", "search", "management", "gemini"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -29,39 +29,43 @@ classifiers = [
 ]
 requires-python = ">=3.8"
 dependencies = ["click>=8.0"]
-# Optional dependencies
-optional-dependencies = {
-    "dev" = [
-        "pytest>=7.0",
-        "pytest-cov>=4.0",
-        "black>=23.0",
-        "isort>=5.12",
-        "flake8>=6.0",
-        "mypy>=1.0",
-        "sphinx>=7.0",
-        "sphinx-rtd-theme>=1.0",
-    ],
-    "test" = [
-        "pytest>=7.0",
-        "pytest-cov>=4.0",
-    ],
-    "docs" = [
-        "sphinx>=7.0",
-        "sphinx-rtd-theme>=1.0",
-    ],
-}
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "isort>=5.12",
+    "flake8>=6.0",
+    "mypy>=1.0",
+    "sphinx>=7.0",
+    "sphinx-rtd-theme>=1.0",
+]
+test = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-rtd-theme>=1.0",
+]
+photo = [
+    "pillow>=10.0",
+    "google-genai>=1.0",
+    "sqlalchemy>=2.0",
+]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/opencode-testing"
-Repository = "https://github.com/yourusername/opencode-testing.git"
-Issues = "https://github.com/yourusername/opencode-testing/issues"
-Documentation = "https://yourusername.github.io/opencode-testing"
+Homepage = "https://github.com/yourusername/photo-hub"
+Repository = "https://github.com/yourusername/photo-hub.git"
+Issues = "https://github.com/yourusername/photo-hub/issues"
+Documentation = "https://yourusername.github.io/photo-hub"
 
 [project.scripts]
-opencode-testing = "opencode_testing.cli:main"
+photo-hub = "photo_hub.cli:main"
 
-[project.entry-points."opencode_testing.plugins"]
-example = "opencode_testing.plugins:example"
+[project.entry-points."photo_hub.plugins"]
+example = "photo_hub.plugins:example"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -69,11 +73,11 @@ zip-safe = false
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["opencode_testing*"]
+include = ["photo_hub*"]
 exclude = []
 
 [tool.setuptools.package-data]
-opencode_testing = ["py.typed"]
+photo_hub = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -131,7 +135,7 @@ warn_unreachable = true
 strict_equality = true
 
 [tool.coverage.run]
-source = ["src/opencode_testing"]
+source = ["src/photo_hub"]
 omit = [
     "*/tests/*",
     "*/test_*.py",

@@ -137,3 +137,10 @@ cython_debug/
 # OS
 .DS_Store
 Thumbs.db
+
+# Project specific
+.opencode-test/
+photo_search.db
+*.db
+*.sqlite
+*.sqlite3
