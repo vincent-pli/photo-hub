@@ -121,18 +121,21 @@ def photos():
 @photos.command()
 @click.argument("directory", type=click.Path(exists=True, file_okay=False))
 @click.option("--recursive/--no-recursive", default=True, help="Scan subdirectories recursively")
-@click.option("--api-key", help="Google AI Studio API key (or set GOOGLE_API_KEY env var)")
-@click.option("--model", default="gemini-2.0-flash-exp", help="Gemini model to use (e.g., gemini-2.0-flash-exp, gemini-flash-latest, gemini-2.5-flash, gemini-2.0-flash)")
+@click.option("--api-key", help="API key for the AI service (or set GOOGLE_API_KEY/QWEN_API_KEY environment variable)")
+@click.option("--model", default="gemini-2.0-flash-exp", help="Model to use (e.g., gemini-2.0-flash-exp, qwen-max, qwen-turbo, mock)")
+@click.option("--base-url", help="Custom base URL for API (for self-hosted or custom endpoints)")
 @click.option("--db-path", default="photo_search.db", help="Database file path")
 @click.option("--skip-existing", is_flag=True, help="Skip photos already analyzed")
+@click.option("--language", type=click.Choice(["en", "zh", "auto"]), default="auto", help="Language for analysis (en=English, zh=Chinese, auto=auto-detect)")
 @click.option("--mock", is_flag=True, help="Use mock analyzer for testing (no API calls)")
 @click.pass_context
-def scan(ctx, directory, recursive, api_key, model, db_path, skip_existing, mock):
-    """Scan directory and analyze photos with Gemini."""
+def scan(ctx, directory, recursive, api_key, model, base_url, db_path, skip_existing, language, mock):
+    """Scan directory and analyze photos with AI models."""
+    from photo_hub.photo_search.config import Language
     try:
         from photo_hub.photo_search.scanner import scan_photos
-        from photo_hub.photo_search.gemini_client_new import GeminiPhotoAnalyzer, MockPhotoAnalyzer
         from photo_hub.photo_search.metadata_store import MetadataStore
+        from photo_hub.photo_search.factory import create_analyzer
     except ImportError as e:
         click.echo(f"Error: Photo search dependencies not installed. Install with: pip install photo-hub[photo]", err=True)
         click.echo(f"Detailed error: {e}", err=True)
@@ -147,15 +150,39 @@ def scan(ctx, directory, recursive, api_key, model, db_path, skip_existing, mock
     # Choose analyzer based on mock flag
     if mock:
         click.echo("Using mock analyzer (no API calls)")
-        analyzer = MockPhotoAnalyzer(model="mock-gemini")
+        from photo_hub.photo_search.gemini_client_new import MockPhotoAnalyzer
+        analyzer = MockPhotoAnalyzer(model="mock")
     else:
-        # Get API key from parameter or environment
-        api_key = api_key or os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            click.echo("Error: API key required. Set --api-key or GOOGLE_API_KEY environment variable.", err=True)
-            ctx.exit(1)
         click.echo(f"Using model: {model}")
-        analyzer = GeminiPhotoAnalyzer(api_key=api_key, model=model)
+        try:
+            analyzer = create_analyzer(
+                model=model,
+                api_key=api_key,
+                base_url=base_url
+            )
+        except ValueError as e:
+            click.echo(f"Error: {e}", err=True)
+            ctx.exit(1)
+        except ImportError as e:
+            # Provide specific installation instructions based on model type
+            if model.lower().startswith("qwen"):
+                click.echo(f"Error: Missing dependencies for Qwen model '{model}'.", err=True)
+                click.echo(f"To install Qwen dependencies, run:", err=True)
+                click.echo(f"  pip install photo-hub[photo]", err=True)
+                click.echo(f"Or install specific packages:", err=True)
+                click.echo(f"  pip install openai pillow", err=True)
+            elif model.lower().startswith("gemini"):
+                click.echo(f"Error: Missing dependencies for Gemini model '{model}'.", err=True)
+                click.echo(f"To install Gemini dependencies, run:", err=True)
+                click.echo(f"  pip install photo-hub[photo]", err=True)
+                click.echo(f"Or install specific packages:", err=True)
+                click.echo(f"  pip install google-genai pillow", err=True)
+            else:
+                click.echo(f"Error: Missing dependencies for model '{model}'.", err=True)
+                click.echo(f"To install all photo analysis dependencies, run:", err=True)
+                click.echo(f"  pip install photo-hub[photo]", err=True)
+            click.echo(f"Detailed error: {e}", err=True)
+            ctx.exit(1)
     
     # Scan photos
     photos = scan_photos(directory, recursive=recursive)
@@ -173,6 +200,9 @@ def scan(ctx, directory, recursive, api_key, model, db_path, skip_existing, mock
         photos = filtered_photos
         click.echo(f"After filtering, {len(photos)} photos to analyze")
     
+    # Convert language string to Language enum
+    language_enum = Language.normalize(language)
+    
     if not photos:
         click.echo("No photos to analyze.")
         return
@@ -182,7 +212,7 @@ def scan(ctx, directory, recursive, api_key, model, db_path, skip_existing, mock
     for i, photo in enumerate(photos, 1):
         click.echo(f"Analyzing [{i}/{len(photos)}]: {photo.filename}")
         try:
-            result = analyzer.analyze_photo(photo.path)
+            result = analyzer.analyze_photo(photo.path, language=language_enum)
             store.save_analysis_result(result)
             successful += 1
             click.echo(f"  ✓ {result.description[:100]}...")

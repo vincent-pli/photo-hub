@@ -8,8 +8,8 @@ AI-powered photo management and search tool.
 - CLI interface for easy usage
 - Comprehensive test suite with pytest
 - Documentation with Sphinx
-- **AI-powered photo search**: Scan directories, analyze photos with Gemini AI, and search by content
-- Extensible architecture supporting multiple LLM backends
+- **AI-powered photo search**: Scan directories, analyze photos with Gemini AI or Qwen AI, and search by content
+- Extensible architecture supporting multiple LLM backends (Gemini, Qwen, and more)
 - SQLite-based metadata storage
 - MIT licensed
 
@@ -31,15 +31,32 @@ The photo search functionality requires additional dependencies. Install them wi
 pip install photo-hub[photo]
 ```
 
+This will install:
+- `pillow>=10.0` - Image processing
+- `google-genai>=1.0` - Gemini AI integration (for Gemini models)
+- `openai>=1.0` - Qwen AI integration (for Qwen models via OpenAI-compatible API)
+- `sqlalchemy>=2.0` - Database storage
+
 Or install all dependencies (including development tools):
 
 ```bash
 pip install photo-hub[photo,dev]
 ```
 
-You'll also need a Google AI Studio API key for Gemini AI. Set it as an environment variable:
+**Note**: If you get "Missing dependencies" errors when using AI models, make sure you've installed the `[photo]` extras.
+
+You'll need an API key for the AI service you want to use:
+
+- For Gemini AI: Get a free API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+- For Qwen AI: Get an API key from [DashScope](https://dashscope.aliyun.com/) (Alibaba Cloud)
+
+Set the appropriate environment variable:
 ```bash
-export GOOGLE_API_KEY="your-api-key-here"
+# For Gemini
+export GOOGLE_API_KEY="your-google-api-key"
+
+# For Qwen
+export QWEN_API_KEY="your-qwen-api-key"
 ```
 
 ### Development setup
@@ -64,16 +81,25 @@ Get started with AI-powered photo search in minutes:
 pip install photo-hub[photo]
 ```
 
-### Step 2: Set up your Gemini API key
+### Step 2: Set up your API key
 
+Choose your AI service:
+
+#### Option A: Gemini AI (Google)
 ```bash
 # Set your Google AI Studio API key as an environment variable
 export GOOGLE_API_KEY="your-api-key-here"
-
-# Or use the --api-key option with commands
 ```
 
-> **Note**: Get a free API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+#### Option B: Qwen AI (Alibaba Cloud)
+```bash
+# Set your DashScope API key as an environment variable
+export QWEN_API_KEY="your-api-key-here"
+```
+
+> **Note**: 
+> - Get a free Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+> - Get a Qwen API key from [DashScope](https://dashscope.aliyun.com/)
 
 > **Testing without API key**: Use `--mock` flag for testing without real API calls
 
@@ -92,8 +118,11 @@ photo-hub photos --help
 ### Step 4: Scan and analyze your photos
 
 ```bash
-# Scan a directory and analyze photos with Gemini AI
+# Scan a directory and analyze photos with AI models (default: Gemini)
 photo-hub photos scan ~/Pictures --recursive
+
+# Use Qwen model instead
+photo-hub photos scan ~/Pictures --recursive --model qwen-max --api-key $QWEN_API_KEY
 
 # Use --skip-existing to avoid re-analyzing already processed photos
 photo-hub photos scan ~/Pictures --recursive --skip-existing

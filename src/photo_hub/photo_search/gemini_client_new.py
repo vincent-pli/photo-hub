@@ -19,6 +19,8 @@ except ImportError:
     genai = None
 
 from photo_hub.photo_search.models import AnalysisResult
+from photo_hub.photo_search.base import PhotoAnalyzer
+from photo_hub.photo_search.config import Language, get_prompt_for_language, resolve_language
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,7 @@ Return the analysis in this exact JSON format:
 }"""
 
 
-class GeminiPhotoAnalyzer:
+class GeminiPhotoAnalyzer(PhotoAnalyzer):
     """Analyze photos using Gemini API with the new google.genai library."""
     
     def __init__(self, api_key: str, model: str = "gemini-2.0-flash-exp"):
@@ -50,26 +52,37 @@ class GeminiPhotoAnalyzer:
                 "Install with: pip install google-genai"
             )
         
-        self.client = genai.Client(api_key=api_key)
-        self.model = model
+        self.client = genai.Client(api_key=api_key)  # type: ignore
+        self._model = model
         self._rate_limit_delay = 30  # seconds between requests (for free tier)
+    
+    @property
+    def model(self) -> str:
+        return self._model
         
-    def analyze_photo(self, image_path: str, prompt: Optional[str] = None) -> AnalysisResult:
+    def analyze_photo(self, image_path: str, prompt: Optional[str] = None, language: Language = Language.AUTO) -> AnalysisResult:
         """Analyze a single photo with Gemini."""
-        logger.info(f"Analyzing photo: {image_path}")
+        logger.info(f"Analyzing photo: {image_path} with language: {language}")
         
         # Load and preprocess image
         image_data = self._load_and_preprocess_image(image_path)
+        
+        # Get appropriate prompt based on language if no custom prompt provided
+        if prompt is None:
+            prompt = get_prompt_for_language(language)
         
         try:
             # Call Gemini API with the new library
             response = self.client.models.generate_content(
                 model=self.model,
-                contents=[prompt or DEFAULT_PROMPT, image_data]
+                contents=[prompt, image_data]
             )
             
             # Parse response
-            result = self._parse_response(response.text, image_path)
+            response_text = response.text
+            if response_text is None:
+                raise ValueError(f"Gemini API returned empty response for {image_path}")
+            result = self._parse_response(response_text, image_path)
             
             # Rate limiting for free tier
             time.sleep(self._rate_limit_delay)
@@ -129,13 +142,14 @@ class GeminiPhotoAnalyzer:
     def batch_analyze(
         self, 
         image_paths: List[str], 
-        prompt: Optional[str] = None
+        prompt: Optional[str] = None,
+        language: Language = Language.AUTO
     ) -> List[AnalysisResult]:
         """Analyze multiple photos with rate limiting."""
         results = []
         for i, image_path in enumerate(image_paths):
             try:
-                result = self.analyze_photo(image_path, prompt)
+                result = self.analyze_photo(image_path, prompt, language)
                 results.append(result)
                 logger.info(f"Completed {i+1}/{len(image_paths)}: {image_path}")
             except Exception as e:
@@ -161,7 +175,7 @@ class GeminiPhotoAnalyzer:
             max_size = 2048
             if max(img.size) > max_size:
                 ratio = max_size / max(img.size)
-                new_size = tuple(int(dim * ratio) for dim in img.size)
+                new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
                 img = img.resize(new_size, Image.Resampling.LANCZOS)
             
             # Return the image object
@@ -226,12 +240,12 @@ def create_analyzer(api_key: str) -> GeminiPhotoAnalyzer:
     return GeminiPhotoAnalyzer(api_key=api_key)
 
 
-class MockPhotoAnalyzer:
+class MockPhotoAnalyzer(PhotoAnalyzer):
     """Mock analyzer for testing without real API calls."""
     
     def __init__(self, model: str = "mock-gemini"):
-        self.model = model
-        self._mock_responses = {
+        self._model = model
+        self._mock_responses_en = {
             "warm.jpeg": {
                 "description": "A warm and cozy indoor scene with soft lighting",
                 "people": ["person sitting", "family member"],
@@ -268,22 +282,79 @@ class MockPhotoAnalyzer:
                 "tags": ["office", "work", "business", "computer", "professional"]
             }
         }
+        self._mock_responses_zh = {
+            "warm.jpeg": {
+                "description": "温暖舒适的室内场景，光线柔和",
+                "people": ["坐着的人", "家庭成员"],
+                "locations": ["客厅", "家", "室内"],
+                "objects": ["沙发", "台灯", "书", "毯子"],
+                "tags": ["舒适", "温暖", "家", "放松", "温馨"]
+            },
+            "beach_sunset.jpg": {
+                "description": "海滩上美丽的日落，金色沙滩和橙色的天空",
+                "people": ["散步的情侣", "玩耍的孩子们"],
+                "locations": ["海滩", "海洋", "海岸线"],
+                "objects": ["太阳", "波浪", "沙子", "遮阳伞"],
+                "tags": ["日落", "海滩", "海洋", "傍晚", "假期"]
+            },
+            "mountain_hike.png": {
+                "description": "人们在山间小径上徒步，风景优美",
+                "people": ["徒步者", "游客"],
+                "locations": ["山脉", "小径", "森林"],
+                "objects": ["背包", "树木", "岩石", "天空"],
+                "tags": ["徒步", "山脉", "自然", "户外", "冒险"]
+            },
+            "birthday_party.jpeg": {
+                "description": "生日派对庆祝，有蛋糕和气球",
+                "people": ["家人", "朋友", "孩子们"],
+                "locations": ["客厅", "室内", "家"],
+                "objects": ["蛋糕", "气球", "蜡烛", "礼物"],
+                "tags": ["生日", "派对", "庆祝", "家庭", "蛋糕"]
+            },
+            "office_work.jpg": {
+                "description": "人们在现代办公室环境中工作",
+                "people": ["办公室职员", "同事"],
+                "locations": ["办公室", "工作区", "室内"],
+                "objects": ["电脑", "桌子", "椅子", "显示器"],
+                "tags": ["办公室", "工作", "商务", "电脑", "专业"]
+            }
+        }
     
-    def analyze_photo(self, image_path: str, prompt: Optional[str] = None) -> AnalysisResult:
+    @property
+    def model(self) -> str:
+        return self._model
+    
+    def analyze_photo(self, image_path: str, prompt: Optional[str] = None, language: Language = Language.AUTO) -> AnalysisResult:
         """Mock analysis based on filename."""
         filename = Path(image_path).name
         
-        if filename in self._mock_responses:
-            data = self._mock_responses[filename]
+        # Choose response dictionary based on language
+        resolved_language = resolve_language(language)
+        if resolved_language == Language.ZH:
+            responses = self._mock_responses_zh
+        else:
+            responses = self._mock_responses_en
+        
+        if filename in responses:
+            data = responses[filename]
         else:
             # Default response for unknown files
-            data = {
-                "description": f"A photo titled {filename}",
-                "people": [],
-                "locations": ["unknown"],
-                "objects": [],
-                "tags": ["photo", "image"]
-            }
+            if resolved_language == Language.ZH:
+                data = {
+                    "description": f"一张标题为 {filename} 的照片",
+                    "people": [],
+                    "locations": ["未知"],
+                    "objects": [],
+                    "tags": ["照片", "图像"]
+                }
+            else:
+                data = {
+                    "description": f"A photo titled {filename}",
+                    "people": [],
+                    "locations": ["unknown"],
+                    "objects": [],
+                    "tags": ["photo", "image"]
+                }
         
         return AnalysisResult(
             photo_path=image_path,
@@ -296,9 +367,9 @@ class MockPhotoAnalyzer:
             generated_at=datetime.now()
         )
     
-    def batch_analyze(self, image_paths: List[str], prompt: Optional[str] = None) -> List[AnalysisResult]:
+    def batch_analyze(self, image_paths: List[str], prompt: Optional[str] = None, language: Language = Language.AUTO) -> List[AnalysisResult]:
         """Mock batch analysis."""
-        return [self.analyze_photo(path, prompt) for path in image_paths]
+        return [self.analyze_photo(path, prompt, language) for path in image_paths]
     
     def set_rate_limit_delay(self, seconds: float):
         """Mock method for compatibility."""
