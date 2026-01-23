@@ -1,0 +1,6 @@
+{
+  "db_path": "~/.photo-hub/database.db",
+  "model": "gemini-2.0-flash-exp",
+  "language": "auto",
+  "api_keys_note": "API keys should be set via environment variables, not in this file. Use: export GOOGLE_API_KEY='your-key' for Gemini, export QWEN_API_KEY='your-key' for Qwen."
+}

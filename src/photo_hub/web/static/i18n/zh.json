@@ -1,0 +1,92 @@
+{
+  "app": {
+    "title": "photo-hub",
+    "tagline": "AI驱动的照片管理与搜索",
+    "copyright": "photo-hub © {year} | AI驱动的照片管理 | API文档"
+  },
+  "nav": {
+    "scan": "扫描照片",
+    "search": "搜索照片",
+    "stats": "统计数据"
+  },
+  "scan": {
+    "title": "扫描目录",
+    "description": "选择一个文件夹，使用AI扫描和分析照片。",
+    "folderPath": "文件夹路径",
+    "browse": "浏览",
+    "recursive": "扫描子文件夹",
+    "skipExisting": "跳过已分析的照片",
+    "startScan": "开始扫描",
+    "starting": "正在启动扫描...",
+    "scanning": "正在扫描目录中的照片...",
+    "analyzing": "正在使用AI分析照片...",
+    "completed": "扫描完成！{analyzed} 张新照片已分析，{skipped} 张照片已分析并跳过。",
+    "completedNoSkip": "扫描完成！{analyzed} 张照片分析成功。",
+    "failed": "扫描失败: {error}",
+    "progress": "{progress}%",
+    "filesProcessed": "{processed} / {total} 文件已处理",
+    "processingFile": "正在处理: {file}",
+    "enterDirectory": "请输入目录路径",
+    "taskStarted": "扫描已启动，任务ID: {taskId}",
+    "browsePrompt": "请输入文件夹路径 (例如: /Users/username/Pictures):"
+  },
+  "recentScans": {
+    "title": "最近扫描",
+    "loading": "正在加载最近扫描...",
+    "none": "未找到最近的扫描记录。",
+    "failed": "加载最近扫描失败",
+    "directory": "目录: {directory}",
+    "status": "状态: {status} ({progress}%)",
+    "photosAnalyzed": "已分析照片: {count}",
+    "skipped": "已跳过: {count}"
+  },
+  "search": {
+    "title": "搜索照片",
+    "pageDescription": "通过关键词搜索已分析的照片（例如：\"海滩日落\"、\"生日派对\"）。",
+    "keywords": "搜索关键词",
+    "placeholder": "输入搜索词...",
+    "limit": "结果限制",
+    "searchButton": "搜索照片",
+    "searching": "正在搜索照片...",
+    "enterTerms": "请输入搜索词",
+    "failed": "搜索失败，请重试。",
+    "noResults": "未找到匹配的照片。",
+    "foundResults": "找到 {total} 个结果:",
+    "filename": "文件名",
+    "columnDescription": "描述",
+    "noDescription": "无描述信息",
+    "tags": "标签"
+  },
+  "stats": {
+    "title": "数据库统计",
+    "loading": "正在加载统计数据...",
+    "failed": "加载统计数据失败",
+    "totalPhotos": "照片总数",
+    "totalAnalyses": "AI分析次数",
+    "modelsUsed": "使用的模型",
+    "database": "数据库: {path}"
+  },
+  "about": {
+    "title": "关于 photo-hub",
+    "description": "此应用程序使用AI分析和整理您的照片。它可以：",
+    "features": [
+      "扫描目录中的照片",
+      "使用AI（Gemini 或 Qwen 模型）分析照片内容",
+      "生成描述、标签和元数据",
+      "通过自然语言搜索照片",
+      "将结果存储在本地数据库中"
+    ],
+    "note": "注意：AI分析需要API密钥。如果未设置密钥，将使用模拟分析器进行测试。"
+  },
+  "api": {
+    "error": "API错误: {error}",
+    "connectionError": "无法连接到 photo-hub API。请确保服务器在端口 8000 上运行。"
+  },
+  "common": {
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "info": "信息",
+    "note": "注意:"
+  }
+}

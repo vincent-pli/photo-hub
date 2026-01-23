@@ -1,0 +1,92 @@
+{
+  "app": {
+    "title": "photo-hub",
+    "tagline": "AI-powered photo management and search",
+    "copyright": "photo-hub © {year} | AI-powered photo management | API Documentation"
+  },
+  "nav": {
+    "scan": "Scan Photos",
+    "search": "Search Photos",
+    "stats": "Statistics"
+  },
+  "scan": {
+    "title": "Scan Directory",
+    "description": "Select a folder to scan and analyze photos with AI.",
+    "folderPath": "Folder Path",
+    "browse": "Browse",
+    "recursive": "Scan subfolders",
+    "skipExisting": "Skip already analyzed photos",
+    "startScan": "Start Scan",
+    "starting": "Starting scan...",
+    "scanning": "Scanning directory for photos...",
+    "analyzing": "Analyzing photos with AI...",
+    "completed": "Scan completed! {analyzed} new photos analyzed, {skipped} photos already analyzed and skipped.",
+    "completedNoSkip": "Scan completed! {analyzed} photos analyzed successfully.",
+    "failed": "Scan failed: {error}",
+    "progress": "{progress}%",
+    "filesProcessed": "{processed} of {total} files processed",
+    "processingFile": "Processing: {file}",
+    "enterDirectory": "Please enter a directory path",
+    "taskStarted": "Scan started with task ID: {taskId}",
+    "browsePrompt": "Enter folder path (e.g., /Users/username/Pictures):"
+  },
+  "recentScans": {
+    "title": "Recent Scans",
+    "loading": "Loading recent scans...",
+    "none": "No recent scans found.",
+    "failed": "Failed to load recent scans",
+    "directory": "Directory: {directory}",
+    "status": "Status: {status} ({progress}%)",
+    "photosAnalyzed": "Photos analyzed: {count}",
+    "skipped": "Skipped: {count}"
+  },
+  "search": {
+    "title": "Search Photos",
+    "pageDescription": "Search through analyzed photos by keywords (e.g., \"beach sunset\", \"birthday party\").",
+    "keywords": "Search Keywords",
+    "placeholder": "Enter search terms...",
+    "limit": "Results Limit",
+    "searchButton": "Search Photos",
+    "searching": "Searching photos...",
+    "enterTerms": "Please enter search terms",
+    "failed": "Search failed. Please try again.",
+    "noResults": "No photos found matching your search.",
+    "foundResults": "Found {total} result(s):",
+    "filename": "Filename",
+    "columnDescription": "Description",
+    "noDescription": "No description available",
+    "tags": "Tags"
+  },
+  "stats": {
+    "title": "Database Statistics",
+    "loading": "Loading statistics...",
+    "failed": "Failed to load statistics",
+    "totalPhotos": "Total Photos",
+    "totalAnalyses": "AI Analyses",
+    "modelsUsed": "Models Used",
+    "database": "Database: {path}"
+  },
+  "about": {
+    "title": "About photo-hub",
+    "description": "This application uses AI to analyze and organize your photos. It can:",
+    "features": [
+      "Scan directories for photos",
+      "Analyze photo content using AI (Gemini or Qwen models)",
+      "Generate descriptions, tags, and metadata",
+      "Search photos by natural language",
+      "Store results in a local database"
+    ],
+    "note": "Note: AI analysis requires an API key. If no key is set, a mock analyzer will be used for testing."
+  },
+  "api": {
+    "error": "API Error: {error}",
+    "connectionError": "Cannot connect to photo-hub API. Make sure the server is running on port 8000."
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "info": "Info",
+    "note": "Note:"
+  }
+}

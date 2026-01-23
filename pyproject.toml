@@ -55,6 +55,12 @@ photo = [
     "sqlalchemy>=2.0",
     "openai>=1.0",
 ]
+web = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
+    "aiofiles>=23.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/yourusername/photo-hub"
@@ -78,7 +84,7 @@ include = ["photo_hub*"]
 exclude = []
 
 [tool.setuptools.package-data]
-photo_hub = ["py.typed"]
+photo_hub = ["py.typed", "web/static/*", "web/static/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

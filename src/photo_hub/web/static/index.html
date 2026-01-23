@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>photo-hub | AI Photo Management</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+            min-height: 90vh;
+        }
+        
+        header {
+            background: linear-gradient(90deg, #4f46e5, #7c3aed);
+            color: white;
+            padding: 30px 40px;
+            text-align: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        
+        .logo i {
+            font-size: 2.5rem;
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            font-weight: 800;
+        }
+        
+        .tagline {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-top: 10px;
+        }
+        
+        nav {
+            display: flex;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .nav-button {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #64748b;
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .nav-button:hover {
+            background: #e2e8f0;
+            color: #4f46e5;
+        }
+        
+        .nav-button.active {
+            color: #4f46e5;
+            border-bottom: 3px solid #4f46e5;
+            background: #f1f5f9;
+        }
+        
+        .content {
+            padding: 40px;
+            min-height: 500px;
+        }
+        
+        .page {
+            display: none;
+        }
+        
+        .page.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .card {
+            background: #f8fafc;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+        
+        h2 {
+            color: #4f46e5;
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        h2 i {
+            font-size: 1.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #475569;
+        }
+        
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #cbd5e1;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border 0.3s;
+        }
+        
+        input[type="text"]:focus, input[type="number"]:focus, select:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            accent-color: #4f46e5;
+        }
+        
+        .button {
+            background: linear-gradient(90deg, #4f46e5, #7c3aed);
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(79, 70, 229, 0.4);
+        }
+        
+        .button:active {
+            transform: translateY(0);
+        }
+        
+        .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .progress-container {
+            margin-top: 30px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            height: 20px;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981, #34d399);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+        
+        .progress-text {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .status-message {
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-weight: 500;
+        }
+        
+        .status-success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left: 5px solid #10b981;
+        }
+        
+        .status-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border-left: 5px solid #ef4444;
+        }
+        
+        .status-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border-left: 5px solid #3b82f6;
+        }
+        
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 25px;
+            margin-top: 30px;
+        }
+        
+        .photo-card {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .photo-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+        }
+        
+        .photo-thumbnail {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            background: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            font-size: 3rem;
+        }
+        
+        .photo-info {
+            padding: 20px;
+        }
+        
+        .photo-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            color: #1e293b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .photo-description {
+            font-size: 0.9rem;
+            color: #64748b;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+        }
+        
+        .stat-label {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #64748b;
+        }
+        
+        .loading-spinner {
+            border: 5px solid #e2e8f0;
+            border-top: 5px solid #4f46e5;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: #94a3b8;
+            border-top: 1px solid #e2e8f0;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                border-radius: 10px;
+            }
+            
+            header {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .photo-grid {
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="logo">
+                    <i class="fas fa-images"></i>
+                    <h1 data-i18n="app.title">photo-hub</h1>
+                </div>
+                <div class="language-selector" style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-globe" style="color: white;"></i>
+                    <select id="language-select" style="padding: 8px 12px; border-radius: 6px; border: none; background: rgba(255,255,255,0.2); color: white; cursor: pointer;">
+                        <option value="en">English</option>
+                        <option value="zh">中文</option>
+                    </select>
+                </div>
+            </div>
+            <p class="tagline" data-i18n="app.tagline">AI-powered photo management and search</p>
+        </header>
+        
+        <nav>
+            <button class="nav-button active" data-page="scan">
+                <i class="fas fa-search"></i> <span data-i18n="nav.scan">Scan Photos</span>
+            </button>
+            <button class="nav-button" data-page="search">
+                <i class="fas fa-search"></i> <span data-i18n="nav.search">Search Photos</span>
+            </button>
+            <button class="nav-button" data-page="stats">
+                <i class="fas fa-chart-bar"></i> <span data-i18n="nav.stats">Statistics</span>
+            </button>
+        </nav>
+        
+        <div class="content">
+            <!-- Scan Page -->
+            <div class="page active" id="page-scan">
+                <div class="card">
+                    <h2><i class="fas fa-folder-open"></i> <span data-i18n="scan.title">Scan Directory</span></h2>
+                    <p data-i18n="scan.description">Select a folder to scan and analyze photos with AI.</p>
+                    
+                    <div class="form-group">
+                        <label for="directory" data-i18n="scan.folderPath">Folder Path</label>
+                        <input type="text" id="directory" placeholder="/Users/username/Pictures">
+                        <button class="button" id="browse-btn" style="margin-top: 10px;">
+                            <i class="fas fa-folder"></i> <span data-i18n="scan.browse">Browse</span>
+                        </button>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="recursive" checked>
+                        <label for="recursive" data-i18n="scan.recursive">Scan subfolders</label>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="skip-existing" checked>
+                        <label for="skip-existing" data-i18n="scan.skipExisting">Skip already analyzed photos</label>
+                    </div>
+                    
+                    <button class="button" id="start-scan">
+                        <i class="fas fa-play"></i> <span data-i18n="scan.startScan">Start Scan</span>
+                    </button>
+
+                    
+                    <div id="scan-progress" style="display: none;">
+                        <div class="progress-container">
+                            <div class="progress-bar" id="progress-bar"></div>
+                        </div>
+                        <div class="progress-text">
+                            <span id="progress-text">0%</span>
+                            <span id="file-count">0 files processed</span>
+                        </div>
+                        <div id="current-file" class="status-message status-info"></div>
+                        <div id="scan-status" class="status-message"></div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2><i class="fas fa-history"></i> <span data-i18n="recentScans.title">Recent Scans</span></h2>
+                    <div id="recent-scans">
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            <p data-i18n="recentScans.loading">Loading recent scans...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Search Page -->
+            <div class="page" id="page-search">
+                <div class="card">
+                    <h2><i class="fas fa-search"></i> <span data-i18n="search.title">Search Photos</span></h2>
+                    <p data-i18n="search.pageDescription">Search through analyzed photos by keywords (e.g., "beach sunset", "birthday party").</p>
+                    
+                    <div class="form-group">
+                        <label for="search-query" data-i18n="search.keywords">Search Keywords</label>
+                        <input type="text" id="search-query" placeholder="Enter search terms...">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="search-limit" data-i18n="search.limit">Results Limit</label>
+                        <input type="number" id="search-limit" value="20" min="1" max="100">
+                    </div>
+                    
+                    <button class="button" id="search-btn">
+                        <i class="fas fa-search"></i> <span data-i18n="search.searchButton">Search Photos</span>
+                    </button>
+                </div>
+                
+                <div class="card">
+                    <h2><i class="fas fa-image"></i> <span data-i18n="search.title">Search Results</span></h2>
+                    <div id="search-results">
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            <p data-i18n="search.placeholder">Enter search terms to find photos</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Statistics Page -->
+            <div class="page" id="page-stats">
+                <div class="card">
+                    <h2><i class="fas fa-chart-bar"></i> <span data-i18n="stats.title">Database Statistics</span></h2>
+                    <div id="stats-content">
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            <p data-i18n="stats.loading">Loading statistics...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2><i class="fas fa-info-circle"></i> <span data-i18n="about.title">About photo-hub</span></h2>
+                    <p data-i18n="about.description">This application uses AI to analyze and organize your photos. It can:</p>
+                    <ul style="margin: 15px 0 15px 20px; color: #475569;" id="features-list">
+                        <!-- Features will be populated by JavaScript -->
+                    </ul>
+                    <p><strong data-i18n="common.note">Note:</strong> <span data-i18n="about.note">AI analysis requires an API key. If no key is set, a mock analyzer will be used for testing.</span></p>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p data-i18n="app.copyright" data-i18n-params="{&quot;year&quot;:2025}">photo-hub &copy; 2025 | AI-powered photo management | <a href="http://localhost:8000/docs" target="_blank">API Documentation</a></p>
+        </footer>
+    </div>
+    
+    <script src="/static/js/i18n.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script>
+        // Initialize i18n
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Initialize i18n
+            await window.i18n.init();
+            
+            // Set up language selector
+            const languageSelect = document.getElementById('language-select');
+            if (languageSelect) {
+                languageSelect.value = window.i18n.getLanguage();
+                languageSelect.addEventListener('change', async (e) => {
+                    await window.i18n.setLanguage(e.target.value);
+                    updateUIText();
+                });
+            }
+            
+            // Initial UI text update
+            updateUIText();
+            
+            // Initialize app functionality
+            if (typeof initApp === 'function') {
+                initApp();
+            }
+            
+            // Navigation
+            document.querySelectorAll('.nav-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    const page = button.dataset.page;
+                    
+                    // Update active button
+                    document.querySelectorAll('.nav-button').forEach(btn => {
+                        btn.classList.remove('active');
+                    });
+                    button.classList.add('active');
+                    
+                    // Show selected page
+                    document.querySelectorAll('.page').forEach(pageEl => {
+                        pageEl.classList.remove('active');
+                    });
+                    document.getElementById(`page-${page}`).classList.add('active');
+                });
+            });
+        });
+        
+        // Update all text elements with translations
+        function updateUIText() {
+            // Update elements with data-i18n attribute
+            document.querySelectorAll('[data-i18n]').forEach(element => {
+                const key = element.getAttribute('data-i18n');
+                const paramsAttr = element.getAttribute('data-i18n-params');
+                const params = paramsAttr ? JSON.parse(paramsAttr) : {};
+                
+                if (key.startsWith('about.features')) {
+                    // Handle features list separately
+                    return;
+                }
+                
+                const translation = window.i18n.t(key, params);
+                if (translation) {
+                    element.textContent = translation;
+                }
+            });
+            
+            // Update features list
+            const featuresList = document.getElementById('features-list');
+            if (featuresList) {
+                const features = window.i18n.t('about.features');
+                if (Array.isArray(features)) {
+                    featuresList.innerHTML = '';
+                    features.forEach(feature => {
+                        const li = document.createElement('li');
+                        li.textContent = feature;
+                        featuresList.appendChild(li);
+                    });
+                }
+            }
+            
+            // Update copyright year
+            const year = new Date().getFullYear();
+            const copyrightElements = document.querySelectorAll('[data-i18n="app.copyright"]');
+            copyrightElements.forEach(el => {
+                const params = { year };
+                el.textContent = window.i18n.t('app.copyright', params);
+            });
+        }
+    </script>
+</body>
+</html>

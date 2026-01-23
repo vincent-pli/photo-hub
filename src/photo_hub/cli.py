@@ -4,6 +4,7 @@ import sys
 import os
 import json
 import logging
+from pathlib import Path
 from typing import Optional
 
 import click
@@ -124,7 +125,7 @@ def photos():
 @click.option("--api-key", help="API key for the AI service (or set GOOGLE_API_KEY/QWEN_API_KEY environment variable)")
 @click.option("--model", default="gemini-2.0-flash-exp", help="Model to use (e.g., gemini-2.0-flash-exp, qwen-max, qwen-turbo, mock)")
 @click.option("--base-url", help="Custom base URL for API (for self-hosted or custom endpoints)")
-@click.option("--db-path", default="photo_search.db", help="Database file path")
+@click.option("--db-path", default="~/.photo-hub/database.db", help="Database file path")
 @click.option("--skip-existing", is_flag=True, help="Skip photos already analyzed")
 @click.option("--language", type=click.Choice(["en", "zh", "auto"]), default="auto", help="Language for analysis (en=English, zh=Chinese, auto=auto-detect)")
 @click.option("--mock", is_flag=True, help="Use mock analyzer for testing (no API calls)")
@@ -234,7 +235,7 @@ def scan(ctx, directory, recursive, api_key, model, base_url, db_path, skip_exis
 
 @photos.command()
 @click.argument("query")
-@click.option("--db-path", default="photo_search.db", help="Database file path")
+@click.option("--db-path", default="~/.photo-hub/database.db", help="Database file path")
 @click.option("--limit", default=20, help="Maximum results to show")
 @click.option("--output-format", type=click.Choice(["text", "json"]), default="text", help="Output format")
 @click.pass_context
@@ -274,7 +275,7 @@ def search(ctx, query, db_path, limit, output_format):
 
 
 @photos.command()
-@click.option("--db-path", default="photo_search.db", help="Database file path")
+@click.option("--db-path", default="~/.photo-hub/database.db", help="Database file path")
 @click.pass_context
 def stats(ctx, db_path):
     """Show photo database statistics."""
@@ -306,6 +307,94 @@ def stats(ctx, db_path):
             for model, count in models:
                 click.echo(f"    {model}: {count}")
         conn.close()
+
+
+@cli.command()
+@click.option("--show", is_flag=True, help="Show current configuration")
+@click.option("--init", is_flag=True, help="Initialize configuration file with defaults")
+@click.option("--set", nargs=2, multiple=True, help="Set configuration value (e.g., --set model gemini-2.0-flash)")
+@click.option("--file", default=None, help="Configuration file path (default: auto-detect)")
+def config(show, init, set, file):
+    """Manage photo-hub configuration."""
+    try:
+        from photo_hub.web.config import WebConfig
+    except ImportError as e:
+        click.echo("Error: Web dependencies are not installed.", err=True)
+        click.echo("Install them with: pip install photo-hub[web]", err=True)
+        click.echo(f"Detailed error: {e}", err=True)
+        sys.exit(1)
+    
+    # Load config
+    config_obj = WebConfig.load_from_file(Path(file) if file else None)
+    
+    if init:
+        # Initialize with defaults
+        default_config = WebConfig()
+        config_path = default_config.get_config_path(file)
+        default_config.save_to_file(config_path)
+        click.echo(f"Initialized configuration file at {config_path}")
+        click.echo("Default configuration:")
+        click.echo(json.dumps(default_config.to_dict(), indent=2))
+        return
+    
+    if set:
+        # Update configuration values
+        config_dict = config_obj.to_dict()
+        for key, value in set:
+            if key in config_dict:
+                # Convert value to appropriate type
+                if key == "db_path":
+                    config_obj.db_path = value
+                elif key == "model":
+                    config_obj.model = value
+                elif key == "language":
+                    config_obj.language = value
+                else:
+                    click.echo(f"Warning: Unknown configuration key '{key}'", err=True)
+            else:
+                click.echo(f"Warning: Unknown configuration key '{key}'", err=True)
+        
+        # Save updated config
+        config_path = config_obj.get_config_path(file)
+        config_obj.save_to_file(config_path)
+        click.echo(f"Updated configuration saved to {config_path}")
+    
+    # Show configuration
+    if show or (not init and not set):
+        config_path = config_obj.get_config_path(file)
+        click.echo(f"Configuration file: {config_path}")
+        click.echo("Current configuration:")
+        click.echo(json.dumps(config_obj.to_dict(), indent=2))
+        click.echo("\nNote: API keys should be set via environment variables:")
+        click.echo("  For Gemini: export GOOGLE_API_KEY='your-key'")
+        click.echo("  For Qwen: export QWEN_API_KEY='your-key'")
+
+
+@cli.command()
+@click.option("--host", default="0.0.0.0", help="Host to bind the web server to")
+@click.option("--port", default=8000, help="Port to run the web server on")
+@click.option("--reload", is_flag=True, help="Enable auto-reload for development")
+def web(host, port, reload):
+    """Launch the photo-hub web interface."""
+    try:
+        from photo_hub.web import app
+        import uvicorn
+    except ImportError as e:
+        click.echo("Error: Web dependencies are not installed.", err=True)
+        click.echo("Install them with: pip install photo-hub[web]", err=True)
+        click.echo(f"Detailed error: {e}", err=True)
+        sys.exit(1)
+    
+    click.echo(f"Starting photo-hub web server on http://{host}:{port}")
+    click.echo("Press Ctrl+C to stop the server")
+    
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        reload=reload,
+        log_level="info"
+    )
 
 
 def main() -> None:
