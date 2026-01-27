@@ -129,10 +129,14 @@ def photos():
 @click.option("--skip-existing", is_flag=True, help="Skip photos already analyzed")
 @click.option("--language", type=click.Choice(["en", "zh", "auto"]), default="auto", help="Language for analysis (en=English, zh=Chinese, auto=auto-detect)")
 @click.option("--mock", is_flag=True, help="Use mock analyzer for testing (no API calls)")
+@click.option("--max-concurrent", type=int, help="Maximum concurrent API calls (default: 5 for Qwen, 3 for Gemini)")
+@click.option("--batch-size", type=int, default=10, help="Batch size for processing (default: 10)")
+@click.option("--async-mode", is_flag=True, help="Use async processing for better performance")
 @click.pass_context
-def scan(ctx, directory, recursive, api_key, model, base_url, db_path, skip_existing, language, mock):
+def scan(ctx, directory, recursive, api_key, model, base_url, db_path, skip_existing, language, mock, max_concurrent, batch_size, async_mode):
     """Scan directory and analyze photos with AI models."""
     from photo_hub.photo_search.config import Language
+    from pathlib import Path
     try:
         from photo_hub.photo_search.scanner import scan_photos
         from photo_hub.photo_search.metadata_store import MetadataStore
@@ -190,16 +194,18 @@ def scan(ctx, directory, recursive, api_key, model, base_url, db_path, skip_exis
     click.echo(f"Found {len(photos)} photos")
     
     # Filter out already analyzed photos if requested
+    skipped_files = 0
     if skip_existing:
         filtered_photos = []
         for photo in photos:
             existing = store.get_analysis_result(photo.path, model)
             if existing:
                 click.echo(f"Skipping already analyzed: {photo.filename}")
+                skipped_files += 1
             else:
                 filtered_photos.append(photo)
         photos = filtered_photos
-        click.echo(f"After filtering, {len(photos)} photos to analyze")
+        click.echo(f"After filtering, {len(photos)} photos to analyze (skipped {skipped_files})")
     
     # Convert language string to Language enum
     language_enum = Language.normalize(language)
@@ -208,22 +214,105 @@ def scan(ctx, directory, recursive, api_key, model, base_url, db_path, skip_exis
         click.echo("No photos to analyze.")
         return
     
+    # Set concurrency limits
+    if max_concurrent:
+        analyzer.set_concurrency_limit(max_concurrent)
+    analyzer.set_batch_size(batch_size)
+    
     # Analyze photos
     successful = 0
-    for i, photo in enumerate(photos, 1):
-        click.echo(f"Analyzing [{i}/{len(photos)}]: {photo.filename}")
-        try:
-            result = analyzer.analyze_photo(photo.path, language=language_enum)
-            store.save_analysis_result(result)
-            successful += 1
-            click.echo(f"  ✓ {result.description[:100]}...")
-        except Exception as e:
-            click.echo(f"  ✗ Error: {e}", err=True)
-            if ctx.obj.get("debug"):
-                import traceback
-                traceback.print_exc()
+    failed = 0
     
-    click.echo(f"Analysis complete: {successful}/{len(photos)} successful")
+    if async_mode:
+        # Use async processing
+        click.echo(f"Using async mode with {max_concurrent or 'default'} concurrent workers")
+        try:
+            import asyncio
+            
+            async def analyze_async():
+                nonlocal successful, failed
+                
+                # Try to use batch store for better performance
+                try:
+                    from photo_hub.photo_search.metadata_store import BatchMetadataStore
+                    batch_store = BatchMetadataStore(db_path, batch_size=50)
+                    use_batch = True
+                except ImportError:
+                    batch_store = store
+                    use_batch = False
+                
+                # Get image paths
+                image_paths = [photo.path for photo in photos]
+                
+                # Use async batch analysis if available
+                try:
+                    results = await analyzer.batch_analyze_async(
+                        image_paths=image_paths,
+                        language=language_enum,
+                        max_concurrent=max_concurrent or 5,
+                        batch_size=batch_size
+                    )
+                    
+                    # Save results
+                    for i, result in enumerate(results, 1):
+                        click.echo(f"Analyzed [{i}/{len(photos)}]: {Path(result.photo_path).name}")
+                        
+                        if use_batch:
+                            await batch_store.save_analysis_result_batch(result)
+                        else:
+                            store.save_analysis_result(result)
+                        
+                        successful += 1
+                        click.echo(f"  ✓ {result.description[:100]}...")
+                    
+                    # Flush batch if used
+                    if use_batch:
+                        await batch_store.flush_batch()
+                        
+                except (AttributeError, NotImplementedError):
+                    # Fall back to synchronous processing
+                    click.echo("Async batch analysis not available, falling back to synchronous")
+                    for i, photo in enumerate(photos, 1):
+                        click.echo(f"Analyzing [{i}/{len(photos)}]: {photo.filename}")
+                        try:
+                            result = analyzer.analyze_photo(photo.path, language=language_enum)
+                            store.save_analysis_result(result)
+                            successful += 1
+                            click.echo(f"  ✓ {result.description[:100]}...")
+                        except Exception as e:
+                            click.echo(f"  ✗ Error: {e}", err=True)
+                            failed += 1
+                            if ctx.obj.get("debug"):
+                                import traceback
+                                traceback.print_exc()
+            
+            # Run async analysis
+            asyncio.run(analyze_async())
+            
+        except ImportError as e:
+            click.echo(f"Async mode not available: {e}, falling back to synchronous", err=True)
+            async_mode = False
+    
+    if not async_mode:
+        # Synchronous processing
+        for i, photo in enumerate(photos, 1):
+            click.echo(f"Analyzing [{i}/{len(photos)}]: {photo.filename}")
+            try:
+                result = analyzer.analyze_photo(photo.path, language=language_enum)
+                store.save_analysis_result(result)
+                successful += 1
+                click.echo(f"  ✓ {result.description[:100]}...")
+            except Exception as e:
+                click.echo(f"  ✗ Error: {e}", err=True)
+                failed += 1
+                if ctx.obj.get("debug"):
+                    import traceback
+                    traceback.print_exc()
+    
+    total_attempted = successful + failed
+    click.echo(f"Analysis complete: {successful}/{total_attempted} successful, {failed} failed")
+    if skipped_files > 0:
+        click.echo(f"Skipped {skipped_files} already analyzed photos")
     
     # Show stats
     stats = store.get_stats()
@@ -349,6 +438,10 @@ def config(show, init, set, file):
                     config_obj.model = value
                 elif key == "language":
                     config_obj.language = value
+                elif key == "max_concurrent":
+                    config_obj.max_concurrent = int(value)
+                elif key == "batch_size":
+                    config_obj.batch_size = int(value)
                 else:
                     click.echo(f"Warning: Unknown configuration key '{key}'", err=True)
             else:

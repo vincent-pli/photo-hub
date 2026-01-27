@@ -133,6 +133,8 @@ class ScanRequest(BaseModel):
     recursive: bool = Field(True, description="Scan subdirectories")
     skip_existing: bool = Field(True, description="Skip already analyzed photos")
     language: Optional[str] = Field("auto", description="Language for analysis (en/zh/auto)")
+    max_concurrent: Optional[int] = Field(None, description="Maximum concurrent API calls (default: 5 for Qwen, 3 for Gemini)")
+    batch_size: Optional[int] = Field(None, description="Batch size for processing (default: 10)")
 
 
 class ScanStatusResponse(BaseModel):
@@ -179,8 +181,8 @@ class StatsResponse(BaseModel):
     database_path: str
 
 
-def scan_directory_task(task_id: str, request: ScanRequest):
-    """Background task to scan and analyze photos."""
+async def scan_directory_task_async(task_id: str, request: ScanRequest):
+    """Async background task to scan and analyze photos with concurrency."""
     task_info = scan_tasks[task_id]
     
     try:
@@ -191,8 +193,16 @@ def scan_directory_task(task_id: str, request: ScanRequest):
         task_info["status"] = "scanning"
         task_info["progress"] = 0.1
         
-        # Initialize components
+        # Initialize components with batch support
         store = MetadataStore(config.db_path)
+        # Try to use batch store if available
+        try:
+            from photo_hub.photo_search.metadata_store import BatchMetadataStore
+            batch_store = BatchMetadataStore(config.db_path, batch_size=50)
+            task_info["batch_mode"] = True
+        except ImportError:
+            batch_store = store
+            task_info["batch_mode"] = False
         
         # Get API key from config
         api_key = config.get_api_key()
@@ -207,11 +217,19 @@ def scan_directory_task(task_id: str, request: ScanRequest):
                 base_url=config.get_base_url()
             )
         
+        # Set concurrency limits from config or defaults
+        max_concurrent = getattr(config, "max_concurrent", 5)
+        batch_size = getattr(config, "batch_size", 10)
+        
+        analyzer.set_concurrency_limit(max_concurrent)
+        analyzer.set_batch_size(batch_size)
+        
         # Scan photos
         photos = scan_photos(request.directory, recursive=request.recursive)
         task_info["total_files"] = len(photos)
         task_info["status"] = "analyzing"
         task_info["progress"] = 0.2
+        task_info["concurrent_workers"] = max_concurrent
         
         # Filter out already analyzed photos if requested
         skipped_files = 0
@@ -230,33 +248,76 @@ def scan_directory_task(task_id: str, request: ScanRequest):
         # Convert language string to appropriate Language enum
         # Use config language if request language is not specified or is "auto"
         language_str: str = request.language if request.language and request.language != "auto" else config.language
+        
+        # Always use the photo_search Language enum if available
         if HAS_PHOTO_DEPS:
-            # Use the real PhotoLanguage from photo_search.config
             from photo_hub.photo_search.config import Language as PhotoLanguage
             language_enum = PhotoLanguage.normalize(language_str)
         else:
-            language_enum = Language.normalize(language_str)
+            # Fallback for testing - convert to string that analyzer can handle
+            # Mock analyzers typically accept string values
+            language_enum = language_str if language_str != "auto" else "en"
         
-        # Analyze photos
+        # Analyze photos asynchronously
         successful = 0
-        for i, photo in enumerate(photos):
-            # Update progress
-            task_info["current_file"] = photo.filename
-            task_info["processed_files"] = i
-            task_info["progress"] = 0.2 + (i / len(photos) * 0.8) if photos else 0.8
+        failed = 0
+        
+        # Get image paths for batch processing
+        image_paths = [photo.path for photo in photos]
+        
+        # Update progress tracking
+        task_info["current_file"] = "Starting batch analysis..."
+        task_info["processed_files"] = 0
+        
+        # Use async batch analysis if available
+        try:
+            results = await analyzer.batch_analyze_async(
+                image_paths=image_paths,
+                language=language_enum,  # type: ignore
+                max_concurrent=max_concurrent,
+                batch_size=batch_size
+            )
             
-            try:
-                result = analyzer.analyze_photo(photo.path, language=language_enum)  # type: ignore
-                store.save_analysis_result(result)
+            # Save results with batch support
+            for i, result in enumerate(results):
+                task_info["current_file"] = Path(result.photo_path).name
+                task_info["processed_files"] = i + 1
+                task_info["progress"] = 0.2 + ((i + 1) / len(photos) * 0.8) if photos else 0.8
+                
+                if task_info["batch_mode"]:
+                    await batch_store.save_analysis_result_batch(result)
+                else:
+                    store.save_analysis_result(result)
+                
                 successful += 1
-                logging.info(f"Analyzed: {photo.filename}")
-            except Exception as e:
-                logging.error(f"Error analyzing {photo.filename}: {e}")
+                logging.info(f"Analyzed: {Path(result.photo_path).name}")
+                
+        except (AttributeError, NotImplementedError):
+            # Fall back to synchronous processing if async not available
+            logging.warning("Async batch analysis not available, falling back to synchronous")
+            for i, photo in enumerate(photos):
+                task_info["current_file"] = photo.filename
+                task_info["processed_files"] = i
+                task_info["progress"] = 0.2 + (i / len(photos) * 0.8) if photos else 0.8
+                
+                try:
+                    result = analyzer.analyze_photo(photo.path, language=language_enum)  # type: ignore
+                    store.save_analysis_result(result)
+                    successful += 1
+                    logging.info(f"Analyzed: {photo.filename}")
+                except Exception as e:
+                    logging.error(f"Error analyzing {photo.filename}: {e}")
+                    failed += 1
+        
+        # Flush any pending batch writes
+        if task_info["batch_mode"]:
+            await batch_store.flush_batch()
         
         # Update final status
         task_info["status"] = "completed"
         task_info["progress"] = 1.0
         task_info["successful_analyses"] = successful
+        task_info["failed_analyses"] = failed
         task_info["skipped_files"] = skipped_files
         task_info["processed_files"] = len(photos)
         task_info["completed_at"] = datetime.now()
@@ -270,6 +331,11 @@ def scan_directory_task(task_id: str, request: ScanRequest):
         task_info["status"] = "error"
         task_info["error_message"] = str(e)
         task_info["completed_at"] = datetime.now()
+
+
+def scan_directory_task(task_id: str, request: ScanRequest):
+    """Synchronous wrapper for async scan task."""
+    asyncio.run(scan_directory_task_async(task_id, request))
 
 
 # API endpoints
@@ -380,8 +446,8 @@ async def search_photos(request: SearchRequest):
                 people=result.get("people", []),
                 locations=result.get("locations", []),
                 objects=result.get("objects", []),
-                created_time=datetime.fromisoformat(result.get("created_time")) if result.get("created_time") else None,  # type: ignore
-                modified_time=datetime.fromisoformat(result.get("modified_time")) if result.get("modified_time") else None,  # type: ignore
+                created_time=datetime.fromisoformat(result["created_time"]) if result.get("created_time") else None,
+                modified_time=datetime.fromisoformat(result["modified_time"]) if result.get("modified_time") else None,
             ))
         
         return SearchResponse(results=photo_results, total=len(photo_results))

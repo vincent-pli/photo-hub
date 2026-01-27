@@ -1,5 +1,6 @@
 """Metadata storage for photos and analysis results."""
 
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -186,6 +187,17 @@ class MetadataStore:
                     raise ValueError("Failed to get last insert ID")
                 return lastrowid
     
+    async def save_analysis_result_batch(self, result: AnalysisResult) -> None:
+        """Save analysis result to batch for later bulk insert."""
+        # This is a no-op in the base class, overridden in BatchMetadataStore
+        # We still save it immediately for backward compatibility
+        self.save_analysis_result(result)
+    
+    async def flush_batch(self) -> None:
+        """Flush any pending batch writes."""
+        # No-op in base class
+        pass
+    
     def save_photo_metadata_from_path(self, photo_path: str) -> int:
         """Save basic photo metadata from file path."""
         from photo_hub.photo_search.scanner import PhotoScanner
@@ -302,3 +314,131 @@ class MetadataStore:
             tags=json.loads(row["tags"]) if row["tags"] else [],
             generated_at=datetime.fromisoformat(row["generated_at"]),
         )
+
+
+class BatchMetadataStore(MetadataStore):
+    """Batch metadata store with async support for concurrent processing."""
+    
+    def __init__(self, db_path: str = "photo_search.db", batch_size: int = 50):
+        super().__init__(db_path)
+        self.batch_size = batch_size
+        self._pending_results: List[AnalysisResult] = []
+        self._pending_metadata: List[PhotoMetadata] = []
+        self._lock = asyncio.Lock()
+    
+    async def save_analysis_result_batch(self, result: AnalysisResult) -> None:
+        """Save analysis result to batch for later bulk insert."""
+        async with self._lock:
+            self._pending_results.append(result)
+            if len(self._pending_results) >= self.batch_size:
+                await self._flush_results()
+    
+    async def save_photo_metadata_batch(self, metadata: PhotoMetadata) -> None:
+        """Save photo metadata to batch for later bulk insert."""
+        async with self._lock:
+            self._pending_metadata.append(metadata)
+            if len(self._pending_metadata) >= self.batch_size:
+                await self._flush_metadata()
+    
+    async def flush_batch(self) -> None:
+        """Flush any pending batch writes."""
+        async with self._lock:
+            if self._pending_results:
+                await self._flush_results()
+            if self._pending_metadata:
+                await self._flush_metadata()
+    
+    async def _flush_results(self) -> None:
+        """Flush pending analysis results to database."""
+        if not self._pending_results:
+            return
+        
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Prepare batch insert
+                batch_data = []
+                for result in self._pending_results:
+                    # First ensure photo exists
+                    photo_id = self.save_photo_metadata_from_path(result.photo_path)
+                    
+                    batch_data.append((
+                        photo_id,
+                        result.llm_model,
+                        result.description,
+                        json.dumps(result.people),
+                        json.dumps(result.locations),
+                        json.dumps(result.objects),
+                        json.dumps(result.tags),
+                        result.generated_at.isoformat(),
+                    ))
+                
+                # Use INSERT OR REPLACE to handle duplicates
+                cursor.executemany("""
+                    INSERT OR REPLACE INTO analysis_results (
+                        photo_id, llm_model, description,
+                        people, locations, objects, tags, generated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, batch_data)
+                
+                conn.commit()
+                logger.info(f"Flushed {len(batch_data)} analysis results to database")
+                
+        except Exception as e:
+            logger.error(f"Failed to flush analysis results batch: {e}")
+            # Fall back to individual saves
+            for result in self._pending_results:
+                try:
+                    self.save_analysis_result(result)
+                except Exception as inner_e:
+                    logger.error(f"Failed to save individual result: {inner_e}")
+        finally:
+            self._pending_results.clear()
+    
+    async def _flush_metadata(self) -> None:
+        """Flush pending photo metadata to database."""
+        if not self._pending_metadata:
+            return
+        
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Prepare batch insert
+                batch_data = []
+                for metadata in self._pending_metadata:
+                    batch_data.append((
+                        metadata.path,
+                        metadata.filename,
+                        metadata.size,
+                        metadata.created_time.isoformat(),
+                        metadata.modified_time.isoformat(),
+                        metadata.image_width,
+                        metadata.image_height,
+                        metadata.format,
+                        json.dumps(metadata.exif_data),
+                        metadata.file_hash,
+                    ))
+                
+                # Use INSERT OR REPLACE to handle duplicates
+                cursor.executemany("""
+                    INSERT OR REPLACE INTO photos (
+                        path, filename, size, created_time, modified_time,
+                        image_width, image_height, format, exif_data, file_hash
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, batch_data)
+                
+                conn.commit()
+                logger.info(f"Flushed {len(batch_data)} photo metadata records to database")
+                
+        except Exception as e:
+            logger.error(f"Failed to flush metadata batch: {e}")
+            # Fall back to individual saves
+            for metadata in self._pending_metadata:
+                try:
+                    self.save_photo_metadata(metadata)
+                except Exception as inner_e:
+                    logger.error(f"Failed to save individual metadata: {inner_e}")
+        finally:
+            self._pending_metadata.clear()

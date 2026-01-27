@@ -11,6 +11,8 @@ DEFAULT_MODEL = "gemini-2.0-flash-exp"  # Use Gemini by default (free tier avail
 DEFAULT_LANGUAGE = "auto"
 DEFAULT_RECURSIVE = True
 DEFAULT_SKIP_EXISTING = True
+DEFAULT_MAX_CONCURRENT = 5  # Default concurrent API calls
+DEFAULT_BATCH_SIZE = 10  # Default batch size for processing
 
 # Configuration file path
 CONFIG_FILE_PATH = Path.home() / ".photo-hub" / "config.json"
@@ -31,6 +33,8 @@ class WebConfig:
         language: Optional[str] = None,
         google_api_key: Optional[str] = None,
         qwen_api_key: Optional[str] = None,
+        max_concurrent: Optional[int] = None,
+        batch_size: Optional[int] = None,
     ):
         # Expand ~ in db_path if present
         if db_path:
@@ -40,6 +44,8 @@ class WebConfig:
         self.language = language or DEFAULT_LANGUAGE
         self.google_api_key = google_api_key or os.environ.get(ENV_GOOGLE_API_KEY)
         self.qwen_api_key = qwen_api_key or os.environ.get(ENV_QWEN_API_KEY)
+        self.max_concurrent = max_concurrent or DEFAULT_MAX_CONCURRENT
+        self.batch_size = batch_size or DEFAULT_BATCH_SIZE
         
         # Ensure database directory exists
         db_dir = Path(self.db_path).parent
@@ -64,6 +70,8 @@ class WebConfig:
                 language=config_data.get("language"),
                 google_api_key=config_data.get("google_api_key"),
                 qwen_api_key=config_data.get("qwen_api_key"),
+                max_concurrent=config_data.get("max_concurrent"),
+                batch_size=config_data.get("batch_size"),
             )
         except (json.JSONDecodeError, IOError) as e:
             # If config file is invalid, log warning and use defaults
@@ -83,6 +91,8 @@ class WebConfig:
             "db_path": self.db_path,
             "model": self.model,
             "language": self.language,
+            "max_concurrent": self.max_concurrent,
+            "batch_size": self.batch_size,
             # Note: API keys are not saved to config file for security
             # Users should use environment variables
         }
@@ -113,6 +123,8 @@ class WebConfig:
             "db_path": self.db_path,
             "model": self.model,
             "language": self.language,
+            "max_concurrent": self.max_concurrent,
+            "batch_size": self.batch_size,
             "google_api_key_set": bool(self.google_api_key),
             "qwen_api_key_set": bool(self.qwen_api_key),
         }

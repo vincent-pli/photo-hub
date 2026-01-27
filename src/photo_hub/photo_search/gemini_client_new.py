@@ -1,5 +1,6 @@
 """Gemini API client for photo analysis using the new google.genai library."""
 
+import asyncio
 import base64
 import logging
 import time
@@ -42,6 +43,43 @@ Return the analysis in this exact JSON format:
 }"""
 
 
+class AdaptiveRateLimiter:
+    """Adaptive rate limiter that adjusts delays based on API responses."""
+    
+    def __init__(self, initial_delay: float = 30.0, min_delay: float = 1.0, max_delay: float = 120.0):
+        self.delay = initial_delay
+        self.min_delay = min_delay
+        self.max_delay = max_delay
+        self.success_count = 0
+        self.error_count = 0
+        self.consecutive_errors = 0
+        self._lock = asyncio.Lock()
+    
+    async def wait(self):
+        """Wait for the current delay period."""
+        await asyncio.sleep(self.delay)
+    
+    async def adjust_delay(self, success: bool):
+        """Adjust delay based on API call success."""
+        async with self._lock:
+            if success:
+                self.success_count += 1
+                self.consecutive_errors = 0
+                # If we have many successes, reduce delay
+                if self.success_count > 5:  # Gemini free tier is more restrictive
+                    self.delay = max(self.min_delay, self.delay * 0.9)
+                    self.success_count = 0
+            else:
+                self.error_count += 1
+                self.consecutive_errors += 1
+                self.success_count = 0
+                # Increase delay on errors
+                if self.consecutive_errors > 1:  # Gemini is sensitive to errors
+                    self.delay = min(self.max_delay, self.delay * 2.0)
+                elif self.consecutive_errors > 0:
+                    self.delay = min(self.max_delay, self.delay * 1.5)
+
+
 class GeminiPhotoAnalyzer(PhotoAnalyzer):
     """Analyze photos using Gemini API with the new google.genai library."""
     
@@ -55,6 +93,11 @@ class GeminiPhotoAnalyzer(PhotoAnalyzer):
         self.client = genai.Client(api_key=api_key)  # type: ignore
         self._model = model
         self._rate_limit_delay = 30  # seconds between requests (for free tier)
+        self._max_concurrent = 3  # Gemini free tier has stricter limits
+        self._batch_size = 5
+        
+        # Initialize adaptive rate limiter
+        self.rate_limiter = AdaptiveRateLimiter(initial_delay=30.0)
     
     @property
     def model(self) -> str:
@@ -101,22 +144,11 @@ class GeminiPhotoAnalyzer(PhotoAnalyzer):
                     # Extract model IDs (remove 'models/' prefix) and filter for generateContent support
                     available_models = []
                     for m in models:
-                        # Check if model supports generateContent (may be in supported_actions or supported_methods)
-                        supports_generate = False
-                        if hasattr(m, 'supported_actions') and 'generateContent' in m.supported_actions:
-                            supports_generate = True
-                        elif hasattr(m, 'supported_methods') and 'generateContent' in m.supported_methods:
-                            supports_generate = True
-                        elif hasattr(m, 'capabilities') and 'generateContent' in m.capabilities:
-                            supports_generate = True
-                        # Also include any model with 'gemini' in name (fallback)
-                        elif 'gemini' in m.name.lower():
-                            supports_generate = True
-                            
-                        if supports_generate:
-                            model_id = m.name.replace('models/', '')
-                            # Filter out embedding models
-                            if 'embedding' not in model_id.lower():
+                        # Simple check: include models with 'gemini' in name and not embedding
+                        if hasattr(m, 'name') and m.name:
+                            model_name = m.name
+                            if 'gemini' in model_name.lower() and 'embedding' not in model_name.lower():
+                                model_id = model_name.replace('models/', '')
                                 available_models.append(model_id)
                     
                     # Remove duplicates and the current failed model
@@ -136,6 +168,72 @@ class GeminiPhotoAnalyzer(PhotoAnalyzer):
                     f"Please try one of: {', '.join(suggested)}. "
                     f"Use --model flag to specify a different model. "
                     f"Original error: {error_msg}"
+                )
+            raise
+    
+    async def analyze_photo_async(self, image_path: str, prompt: Optional[str] = None, language: Language = Language.AUTO) -> AnalysisResult:
+        """Asynchronously analyze a single photo with Gemini."""
+        logger.info(f"Analyzing photo asynchronously: {image_path} with language: {language}")
+        
+        # Load and preprocess image
+        image_data = self._load_and_preprocess_image(image_path)
+        
+        # Get appropriate prompt based on language if no custom prompt provided
+        if prompt is None:
+            prompt = get_prompt_for_language(language)
+        
+        try:
+            # Call Gemini API (currently synchronous, but we wrap it for future async support)
+            # Note: google.genai doesn't have async API yet, but we keep the interface
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=[prompt, image_data]
+            )
+            
+            # Parse response
+            response_text = response.text
+            if response_text is None:
+                raise ValueError(f"Gemini API returned empty response for {image_path}")
+            result = self._parse_response(response_text, image_path)
+            
+            # Adaptive rate limiting
+            await self.rate_limiter.wait()
+            await self.rate_limiter.adjust_delay(success=True)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Gemini API async error for {image_path}: {e}")
+            
+            # Update rate limiter on error
+            await self.rate_limiter.adjust_delay(success=False)
+            
+            # Provide more helpful error message for model not found
+            error_msg = str(e)
+            if "404" in error_msg or "not found" in error_msg.lower() or "not supported" in error_msg.lower():
+                try:
+                    models = self.client.models.list()
+                    available_models = []
+                    for m in models:
+                        if hasattr(m, 'name') and m.name:
+                            model_name = m.name
+                            if 'gemini' in model_name.lower():
+                                model_id = model_name.replace('models/', '')
+                                if 'embedding' not in model_id.lower():
+                                    available_models.append(model_id)
+                    
+                    available_models = list(set(available_models))
+                    if self.model in available_models:
+                        available_models.remove(self.model)
+                    
+                    available_models.sort()
+                    suggested = available_models[:5] if available_models else ["gemini-2.0-flash-exp", "gemini-flash-latest", "gemini-2.5-flash"]
+                except Exception:
+                    suggested = ["gemini-2.0-flash-exp", "gemini-flash-latest", "gemini-2.5-flash"]
+                
+                raise ValueError(
+                    f"Model '{self.model}' not found or not supported. "
+                    f"Please try one of: {', '.join(suggested)}"
                 )
             raise
     
@@ -232,6 +330,15 @@ class GeminiPhotoAnalyzer(PhotoAnalyzer):
     def set_rate_limit_delay(self, seconds: float):
         """Set delay between API calls (for rate limiting)."""
         self._rate_limit_delay = seconds
+        self.rate_limiter.delay = seconds
+    
+    def set_concurrency_limit(self, max_concurrent: int) -> None:
+        """Set maximum number of concurrent API calls."""
+        self._max_concurrent = max_concurrent
+    
+    def set_batch_size(self, batch_size: int) -> None:
+        """Set batch size for processing."""
+        self._batch_size = batch_size
 
 
 # Convenience function
