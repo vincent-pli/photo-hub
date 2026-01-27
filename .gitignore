@@ -144,3 +144,8 @@ photo_search.db
 *.db
 *.sqlite
 *.sqlite3
+
+# Test and session files
+session-*.md
+test_*.js
+test_*.py
